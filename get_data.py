@@ -1,101 +1,156 @@
 # -*- coding:utf-8 -*-
 """
-Author: BigCat
+数据获取模块 - 从彩票网站爬取历史数据
+Updated Version
 """
 import argparse
-import requests
+import os
 import pandas as pd
+import requests
 from bs4 import BeautifulSoup
 from loguru import logger
-from config import os, name_path, data_file_name
+from config import name_path, data_file_name
+
+# 配置请求超时
+requests.packages.urllib3.disable_warnings()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--name', default="ssq", type=str, help="选择爬取数据: 双色球/大乐透")
+parser.add_argument('--name', default="ssq", type=str, help="选择爬取数据: 双色球(ssq)/大乐透(dlt)")
+parser.add_argument('--output', default="data", type=str, help="数据输出目录")
 args = parser.parse_args()
 
 
 def get_url(name):
     """
-    :param name: 玩法名称
-    :return:
+    获取数据源 URL
+    :param name: 玩法名称 (ssq 或 dlt)
+    :return: 基础 URL 和路径模板
     """
-    url = "https://datachart.500.com/{}/history/".format(name)
+    url = f"https://datachart.500.com/{name}/history/"
     path = "newinc/history.php?start={}&end="
     return url, path
 
 
 def get_current_number(name):
-    """ 获取最新一期数字
-    :return: int
     """
-    url, _ = get_url(name)
-    r = requests.get("{}{}".format(url, "history.shtml"), verify=False)
-    r.encoding = "gb2312"
-    soup = BeautifulSoup(r.text, "lxml")
-    current_num = soup.find("div", class_="wrap_datachart").find("input", id="end")["value"]
-    return current_num
+    获取最新一期号码
+    :param name: 玩法名称
+    :return: 最新期号
+    """
+    try:
+        url, _ = get_url(name)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        r = requests.get(f"{url}history.shtml", headers=headers, verify=False, timeout=10)
+        r.encoding = "gb2312"
+        soup = BeautifulSoup(r.text, "lxml")
+        current_num = soup.find("div", class_="wrap_datachart").find("input", id="end")["value"]
+        logger.info(f"获取最新期号：{current_num}")
+        return current_num
+    except Exception as e:
+        logger.error(f"获取期号失败: {e}")
+        return None
 
 
 def spider(name, start, end, mode):
-    """ 爬取历史数据
-    :param name 玩法
-    :param start 开始一期
-    :param end 最近一期
-    :param mode 模式，train：训练模式，predict：预测模式（训练模式会保持文件）
-    :return:
     """
-    url, path = get_url(name)
-    url = "{}{}{}".format(url, path.format(start), end)
-    r = requests.get(url=url, verify=False)
-    r.encoding = "gb2312"
-    soup = BeautifulSoup(r.text, "lxml")
-    trs = soup.find("tbody", attrs={"id": "tdata"}).find_all("tr")
-    data = []
-    for tr in trs:
-        item = dict()
-        if name == "ssq":
-            item[u"期数"] = tr.find_all("td")[0].get_text().strip()
-            for i in range(6):
-                item[u"红球_{}".format(i+1)] = tr.find_all("td")[i+1].get_text().strip()
-            item[u"蓝球"] = tr.find_all("td")[7].get_text().strip()
-            data.append(item)
-        elif name == "dlt":
-            item[u"期数"] = tr.find_all("td")[0].get_text().strip()
-            for i in range(5):
-                item[u"红球_{}".format(i+1)] = tr.find_all("td")[i+1].get_text().strip()
-            for j in range(2):
-                item[u"蓝球_{}".format(j+1)] = tr.find_all("td")[6+j].get_text().strip()
-            data.append(item)
-        else:
-            logger.warning("抱歉，没有找到数据源！")
-
-    if mode == "train":
+    爬取历史数据
+    :param name: 玩法名称 (ssq 或 dlt)
+    :param start: 开始期号
+    :param end: 结束期号
+    :param mode: 模式 ('train' 或 'predict')
+    :return: DataFrame
+    """
+    try:
+        url, path = get_url(name)
+        full_url = f"{url}{path.format(start)}{end}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        logger.info(f"正在爬取数据: {full_url}")
+        r = requests.get(url=full_url, headers=headers, verify=False, timeout=10)
+        r.encoding = "gb2312"
+        soup = BeautifulSoup(r.text, "lxml")
+        
+        trs = soup.find("tbody", attrs={"id": "tdata"}).find_all("tr")
+        data = []
+        
+        for tr in trs:
+            item = {}
+            try:
+                tds = tr.find_all("td")
+                item["期数"] = tds[0].get_text().strip()
+                
+                if name == "ssq":
+                    # 双色球：6个红球 + 1个蓝球
+                    for i in range(6):
+                        item[f"红球_{i+1}"] = int(tds[i+1].get_text().strip())
+                    item["蓝球"] = int(tds[7].get_text().strip())
+                    
+                elif name == "dlt":
+                    # 大乐透：5个红球 + 2个蓝球
+                    for i in range(5):
+                        item[f"红球_{i+1}"] = int(tds[i+1].get_text().strip())
+                    for j in range(2):
+                        item[f"蓝球_{j+1}"] = int(tds[6+j].get_text().strip())
+                
+                data.append(item)
+            except Exception as e:
+                logger.warning(f"解析行数据失败: {e}")
+                continue
+        
+        if len(data) == 0:
+            logger.warning("未获取到有效数据！")
+            return None
+        
         df = pd.DataFrame(data)
-        df.to_csv("{}{}".format(name_path[name]["path"], data_file_name), encoding="utf-8")
-        return pd.DataFrame(data)
-    elif mode == "predict":
-        return pd.DataFrame(data)
+        
+        if mode == "train":
+            # 训练模式：保存数据到文件
+            data_path = name_path[name]["path"]
+            if not os.path.exists(data_path):
+                os.makedirs(data_path)
+            
+            output_file = os.path.join(data_path, data_file_name)
+            df.to_csv(output_file, index=False, encoding="utf-8")
+            logger.info(f"数据已保存到: {output_file}")
+        
+        logger.info(f"成功获取 {len(df)} 期数据")
+        return df
+        
+    except Exception as e:
+        logger.error(f"爬取数据失败: {e}")
+        return None
 
 
 def run(name):
     """
+    主函数：获取并保存数据
     :param name: 玩法名称
-    :return:
     """
+    logger.info(f"【{name_path[name]['name']}】开始获取数据...")
+    
     current_number = get_current_number(name)
-    logger.info("【{}】最新一期期号：{}".format(name_path[name]["name"], current_number))
-    logger.info("正在获取【{}】数据。。。".format(name_path[name]["name"]))
-    if not os.path.exists(name_path[name]["path"]):
-        os.makedirs(name_path[name]["path"])
+    if current_number is None:
+        logger.error("无法获取最新期号，请检查网络连接")
+        return
+    
+    logger.info(f"【{name_path[name]['name']}】最新一期期号：{current_number}")
+    logger.info(f"正在获取【{name_path[name]['name']}】数据。。。")
+    
     data = spider(name, 1, current_number, "train")
-    if "data" in os.listdir(os.getcwd()):
-        logger.info("【{}】数据准备就绪，共{}期, 下一步可训练模型...".format(name_path[name]["name"], len(data)))
+    
+    if data is not None and len(data) > 0:
+        logger.info(f"【{name_path[name]['name']}】数据准备就绪，共 {len(data)} 期")
+        logger.info("下一步可执行: python run_train_model.py --name {}".format(name))
     else:
-        logger.error("数据文件不存在！")
+        logger.error(f"【{name_path[name]['name']}】数据获取失败！")
 
 
 if __name__ == "__main__":
-    if not args.name:
-        raise Exception("玩法名称不能为空！")
-    else:
-        run(name=args.name)
+    if not args.name or args.name not in ["ssq", "dlt"]:
+        raise Exception("玩法名称无效！请选择 'ssq' (双色球) 或 'dlt' (大乐透)")
+    run(name=args.name)
