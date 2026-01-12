@@ -13,19 +13,22 @@ ball_name = [
 
 data_file_name = "data.csv"
 
+# 获取当前配置文件所在目录（避免中文路径编码问题）
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+
 # 数据路径配置
 name_path = {
     "ssq": {
         "name": "双色球",
-        "path": "data/ssq/"
+        "path": os.path.join(_base_dir, "data/ssq/")
     },
     "dlt": {
         "name": "大乐透",
-        "path": "data/dlt/"
+        "path": os.path.join(_base_dir, "data/dlt/")
     }
 }
 
-model_path = os.path.join(os.getcwd(), "model")
+model_path = os.path.join(_base_dir, "model")
 
 # 模型参数配置
 model_args = {

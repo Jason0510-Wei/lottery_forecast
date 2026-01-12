@@ -1,0 +1,30 @@
+2025-12-11 10:14:16.843 | INFO     | __main__:main:57 - 读取数据: data/dlt/data.csv
+2025-12-11 10:14:16.851 | INFO     | __main__:main:69 - 原始记录数: 2808, 筛选后记录数: 2808 (从 2000 年开始)
+2025-12-11 10:14:24.315 | INFO     | __main__:main:97 - 开始预处理数据并训练（使用内存筛选数据）...
+2025-12-11 10:14:24.331 | INFO     | run_train_model:preprocess_data:76 - 红球数据形状: X=(2805, 15), y=(2805, 5)
+2025-12-11 10:14:24.332 | INFO     | run_train_model:preprocess_data:77 - 蓝球数据形状: X=(2805, 6), y=(2805, 2)
+2025-12-11 10:14:24.332 | INFO     | __main__:main:101 - 开始训练红球模型...
+2025-12-11 10:14:24.333 | INFO     | run_train_model:train_red_ball_model:121 - ==================================================
+2025-12-11 10:14:24.333 | INFO     | run_train_model:train_red_ball_model:122 - 开始训练【大乐透】红球模型...
+2025-12-11 10:14:24.334 | INFO     | run_train_model:train_red_ball_model:123 - ==================================================
+2025-12-11 10:14:24.334 | INFO     | run_train_model:split_data:114 - 训练数据: 1963, 测试数据: 842
+2025-12-11 10:14:24.344 | INFO     | __main__:_load_data_override:91 - (override) 返回内存中筛选后的数据，shape=(2808, 10)
+2025-12-11 10:14:24.436 | INFO     | modeling:build_model:442 - 构建多标签模型 (MultiLabelLSTM) ...
+2025-12-11 10:14:25.294 | INFO     | modeling:build_model:502 - 多标签模型构建完成
+2025-12-11 10:14:25.304 | INFO     | modeling:compile_model:514 - 多标签模型编译完成
+2025-12-11 10:14:57.487 | INFO     | modeling:train:545 - 多标签模型训练完成
+2025-12-11 10:14:58.672 | INFO     | run_train_model:train_red_ball_model:232 - 红球平均命中数 (Top-5): 0.7637
+2025-12-11 10:14:58.673 | INFO     | run_train_model:train_red_ball_model:234 - 命中0个球，345期，占比: 40.97%
+2025-12-11 10:14:58.673 | INFO     | run_train_model:train_red_ball_model:234 - 命中1个球，367期，占比: 43.59%
+2025-12-11 10:14:58.673 | INFO     | run_train_model:train_red_ball_model:234 - 命中2个球，116期，占比: 13.78%
+2025-12-11 10:14:58.674 | INFO     | run_train_model:train_red_ball_model:234 - 命中3个球，12期，占比: 1.43%
+2025-12-11 10:14:58.674 | INFO     | run_train_model:train_red_ball_model:234 - 命中4个球，2期，占比: 0.24%
+2025-12-11 10:14:58.674 | INFO     | run_train_model:train_red_ball_model:238 - 红球模型已保存到: F:\项目\lottery_forecast\model\dlt/red_ball_model/red_ball_model.h5
+2025-12-11 10:14:58.675 | INFO     | __main__:main:105 - 开始训练蓝球模型...
+2025-12-11 10:14:58.675 | INFO     | run_train_model:train_blue_ball_model:247 - ==================================================
+2025-12-11 10:14:58.675 | INFO     | run_train_model:train_blue_ball_model:248 - 开始训练【大乐透】蓝球模型...
+2025-12-11 10:14:58.675 | INFO     | run_train_model:train_blue_ball_model:249 - ==================================================
+2025-12-11 10:14:58.676 | INFO     | run_train_model:split_data:114 - 训练数据: 1963, 测试数据: 842
+2025-12-11 10:14:58.676 | INFO     | modeling:build_model:255 - 构建多输出模型...
+2025-12-11 10:14:59.041 | INFO     | modeling:build_model:302 - 多输出模型构建完成
+2025-12-11 10:14:59.047 | INFO     | modeling:compile_model:318 - 多输出模型编译完成

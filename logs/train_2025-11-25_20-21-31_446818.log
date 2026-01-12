@@ -1,0 +1,13 @@
+2025-11-25 20:21:31.453 | INFO     | run_train_model:load_data:37 - 数据已加载，共 3378 条记录
+2025-11-25 20:21:31.453 | INFO     | run_train_model:load_data:38 - 数据列: ['期数', '红球_1', '红球_2', '红球_3', '红球_4', '红球_5', '红球_6', '蓝球']
+2025-11-25 20:21:31.464 | INFO     | run_train_model:preprocess_data:76 - 红球数据形状: X=(3375, 18), y=(3375, 6)
+2025-11-25 20:21:31.464 | INFO     | run_train_model:preprocess_data:77 - 蓝球数据形状: X=(3375, 3), y=(3375, 1)
+2025-11-25 20:21:31.465 | INFO     | run_train_model:train_red_ball_model:121 - ==================================================
+2025-11-25 20:21:31.465 | INFO     | run_train_model:train_red_ball_model:122 - 开始训练【双色球】红球模型...
+2025-11-25 20:21:31.465 | INFO     | run_train_model:train_red_ball_model:123 - ==================================================
+2025-11-25 20:21:31.466 | INFO     | run_train_model:split_data:114 - 训练数据: 350, 测试数据: 150
+2025-11-25 20:21:31.470 | INFO     | run_train_model:load_data:37 - 数据已加载，共 3378 条记录
+2025-11-25 20:21:31.470 | INFO     | run_train_model:load_data:38 - 数据列: ['期数', '红球_1', '红球_2', '红球_3', '红球_4', '红球_5', '红球_6', '蓝球']
+2025-11-25 20:21:31.576 | INFO     | modeling:build_model:363 - 构建多标签模型 (MultiLabelLSTM) ...
+2025-11-25 20:21:32.075 | INFO     | modeling:build_model:423 - 多标签模型构建完成
+2025-11-25 20:21:32.082 | INFO     | modeling:compile_model:435 - 多标签模型编译完成

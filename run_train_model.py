@@ -11,7 +11,7 @@ from loguru import logger
 import tensorflow as tf
 
 from config import name_path, model_args, model_path, model_names, data_file_name
-from modeling import LotteryPredictor, MultiOutputLSTM
+from modeling import LotteryPredictor, MultiOutputLSTM, MultiLabelLSTM
 
 # 配置日志
 logger.add("logs/train_{time}.log", rotation="500 MB", retention="7 days")
@@ -40,8 +40,14 @@ def load_data(lottery_name):
     return data
 
 
-def preprocess_data(data, lottery_name, window_size=3):
-    """预处理数据"""
+def preprocess_data(data, lottery_name, window_size=None):
+    """预处理数据
+    
+    :param window_size: 时间窗口大小，默认从配置读取
+    """
+    # 如果未指定 window_size，从配置读取
+    if window_size is None:
+        window_size = model_args[lottery_name]["model_args"]["windows_size"]
     
     if lottery_name == "ssq":
         # 双色球：6个红球 + 1个蓝球
@@ -79,15 +85,73 @@ def preprocess_data(data, lottery_name, window_size=3):
     return x_red, y_red, x_blue, y_blue
 
 
-def split_data(x, y, split_ratio=0.7):
-    """划分训练和测试数据"""
-    split_idx = int(len(x) * split_ratio)
-    x_train, x_test = x[:split_idx], x[split_idx:]
-    y_train, y_test = y[:split_idx], y[split_idx:]
+def build_frequency_features(red_data, window_size, n_class):
+    """为每个样本构建历史频率特征（在样本目标期之前的全部历史出现频率）
     
-    logger.info(f"训练数据: {len(x_train)}, 测试数据: {len(x_test)}")
+    向量化实现：使用前缀累计计数，时间复杂度 O(N * num_balls * n_class) 而非 O(N²)
+
+    red_data: ndarray shape (num_draws, num_balls)
+    返回与序列样本对齐的频率矩阵 shape (num_samples, n_class)
+    """
+    num_draws = red_data.shape[0]
+    num_balls = red_data.shape[1]
+    samples = num_draws - window_size
     
-    return x_train, x_test, y_train, y_test
+    if samples <= 0:
+        return np.zeros((0, n_class), dtype=np.float32)
+    
+    # 构建前缀累计计数矩阵 shape: (num_draws + 1, n_class)
+    # prefix_counts[i, c] 表示前 i 期（不含第 i 期）中 c+1 号球的出现次数
+    prefix_counts = np.zeros((num_draws + 1, n_class), dtype=np.float32)
+    
+    # one-hot 累加：每期的红球转为 one-hot 并累加
+    for draw_idx in range(num_draws):
+        # 当期红球的索引（0-indexed）
+        ball_indices = red_data[draw_idx] - 1  # shape: (num_balls,)
+        one_hot = np.zeros(n_class, dtype=np.float32)
+        one_hot[ball_indices] = 1.0
+        prefix_counts[draw_idx + 1] = prefix_counts[draw_idx] + one_hot
+    
+    # 对每个样本，目标期为 i + window_size，取到目标期之前的累计计数
+    freq_features = np.zeros((samples, n_class), dtype=np.float32)
+    for i in range(samples):
+        target_idx = i + window_size
+        counts = prefix_counts[target_idx]  # 目标期之前的累计计数
+        total = counts.sum()
+        if total > 0:
+            freq_features[i] = counts / total
+        else:
+            freq_features[i] = counts
+    
+    return freq_features
+
+
+def split_data(x, y, train_ratio=0.6, val_ratio=0.2):
+    """划分训练、验证和测试数据
+    
+    按时间顺序切分，避免数据泄漏。
+    
+    :param x: 特征数据
+    :param y: 标签数据
+    :param train_ratio: 训练集占比 (默认 60%)
+    :param val_ratio: 验证集占比 (默认 20%)
+    :return: x_train, x_val, x_test, y_train, y_val, y_test
+    """
+    n = len(x)
+    train_idx = int(n * train_ratio)
+    val_idx = int(n * (train_ratio + val_ratio))
+    
+    x_train = x[:train_idx]
+    x_val = x[train_idx:val_idx]
+    x_test = x[val_idx:]
+    
+    y_train = y[:train_idx]
+    y_val = y[train_idx:val_idx]
+    y_test = y[val_idx:]
+    
+    logger.info(f"训练数据: {len(x_train)}, 验证数据: {len(x_val)}, 测试数据: {len(x_test)}")
+    
+    return x_train, x_val, x_test, y_train, y_val, y_test
 
 
 def train_red_ball_model(lottery_name, x_red, y_red):
@@ -98,9 +162,9 @@ def train_red_ball_model(lottery_name, x_red, y_red):
     
     m_args = model_args[lottery_name]
     
-    # 划分数据
-    x_train, x_test, y_train, y_test = split_data(
-        x_red, y_red, args.train_test_split
+    # 划分数据：按时间顺序切分为 train/val/test
+    x_train, x_val, x_test, y_train, y_val, y_test = split_data(
+        x_red, y_red, train_ratio=0.6, val_ratio=0.2
     )
     
     # 确定输出类别数
@@ -109,7 +173,7 @@ def train_red_ball_model(lottery_name, x_red, y_red):
     else:
         n_class = m_args["model_args"]["red_n_class"]
     
-    # 多输出场景（红球通常是多个球）
+    # 多选集合场景（将红球视为集合）
     # 计算球数量
     num_balls = 6 if lottery_name == "ssq" else 5
     # 计算窗口大小（x_train 列数 = window_size * num_balls）
@@ -123,43 +187,106 @@ def train_red_ball_model(lottery_name, x_red, y_red):
     x_train_reshaped = x_train_reshaped - 1
     x_test_reshaped = x_test_reshaped - 1
 
-    # 准备多输出标签列表（每个输出为一维向量，0-indexed）
-    y_train_list = [ (y_train[:, i] - 1).astype(np.int32) for i in range(num_balls) ]
-    y_test_list = [ (y_test[:, i] - 1).astype(np.int32) for i in range(num_balls) ]
+    # 准备多标签二值目标（每个样本为长度 n_class 的 0/1 向量）
+    y_train_binary = np.zeros((y_train.shape[0], n_class), dtype=np.float32)
+    y_test_binary = np.zeros((y_test.shape[0], n_class), dtype=np.float32)
+    for i in range(y_train.shape[0]):
+        # y_train[i] 包含 num_balls 个数值（1-indexed）
+        indices = (y_train[i] - 1).astype(np.int32)
+        y_train_binary[i, indices] = 1.0
+    for i in range(y_test.shape[0]):
+        indices = (y_test[i] - 1).astype(np.int32)
+        y_test_binary[i, indices] = 1.0
 
-    # 建立多输出模型
-    model = MultiOutputLSTM(
+    # 计算频率特征
+    # 需要原始 red_data 来构建频率；重新加载整个数据来获取完整红球历史
+    data_full = load_data(lottery_name)
+    red_cols = [f"红球_{i+1}" for i in range(num_balls)]
+    full_red = data_full[red_cols].values.astype(np.int32)
+    freq_features = build_frequency_features(full_red, window_size, n_class)
+
+    # 将频率特征按 train/val/test 划分
+    train_end = len(x_train)
+    val_end = train_end + len(x_val)
+    x_train_freq = freq_features[:train_end]
+    x_val_freq = freq_features[train_end:val_end]
+    x_test_freq = freq_features[val_end:val_end + len(x_test)]
+
+    # 建立多标签模型
+    model = MultiLabelLSTM(
         n_class=n_class,
         window_size=window_size,
         num_balls=num_balls,
         embedding_size=m_args["model_args"]["red_embedding_size"],
         hidden_size=m_args["model_args"]["red_hidden_size"],
         num_layers=m_args["model_args"]["red_layer_size"],
-        dropout_rate=0.2
+        dropout_rate=0.2,
+        use_numeric_features=True,
+        num_numeric_features=n_class,
+        bidirectional=True
     )
     model.compile_model(learning_rate=m_args["train_args"]["red_learning_rate"])
     model.summary()
 
-    # 训练（多输出接口）
-    model.train(
-        x_train_reshaped, y_train_list,
-        x_val=x_test_reshaped, y_val_list=y_test_list,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        early_stopping_patience=10
-    )
-
-    # 评估（逐个球计算准确率）
-    preds = model.predict(x_test_reshaped)
-    for i in range(num_balls):
-        acc = np.mean(preds[i] == y_test_list[i])
-        logger.info(f"红球第{i+1}个位置 测试准确率: {acc:.4f}")
-
-    # 保存模型
+    # 确保模型保存目录存在并准备回调
     model_dir = m_args["path"]["red"]
     os.makedirs(model_dir, exist_ok=True)
     model_file = os.path.join(model_dir, model_names["red"])
-    model.save(model_file)
+
+    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
+        filepath=model_file,
+        monitor='val_loss',
+        save_best_only=True,
+        verbose=1
+    )
+    reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.5,
+        patience=5,
+        verbose=1
+    )
+
+    # 训练（多标签接口）
+    # 训练时传入两个输入 (序列, 频率特征)
+    # 使用真正的验证集而非测试集，避免数据泄漏
+    # 准备验证集数据
+    x_val_reshaped = x_val.reshape(len(x_val), window_size, num_balls).astype(np.int32) - 1
+    y_val_binary = np.zeros((y_val.shape[0], n_class), dtype=np.float32)
+    for i in range(y_val.shape[0]):
+        indices = (y_val[i] - 1).astype(np.int32)
+        y_val_binary[i, indices] = 1.0
+    
+    model.train(
+        [x_train_reshaped, x_train_freq], y_train_binary,
+        x_val=[x_val_reshaped, x_val_freq], y_val=y_val_binary,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        early_stopping_patience=10,
+        callbacks=[checkpoint_cb, reduce_lr_cb]
+    )
+
+    # 在真正的测试集上评估（集合命中 metrics）
+    x_test_reshaped = x_test.reshape(len(x_test), window_size, num_balls).astype(np.int32) - 1
+    proba = model.predict_proba([x_test_reshaped, x_test_freq])  # shape (N, n_class)
+    hits = []
+    eval_d = {}
+    for i in range(len(proba)):
+        top_pred = np.argsort(-proba[i])[:num_balls] + 1  # 1-indexed
+        true = y_test[i]
+        count = len(set(top_pred.tolist()) & set(true.tolist()))
+        hits.append(count)
+        eval_d[count] = eval_d.get(count, 0) + 1
+
+    avg_hits = np.mean(hits)
+    logger.info(f"红球平均命中数 (Top-{num_balls}): {avg_hits:.4f}")
+    for k, v in sorted(eval_d.items()):
+        logger.info(f"命中{k}个球，{v}期，占比: {round(v * 100 / len(proba), 2)}%")
+
+    # ModelCheckpoint 已经保存了最优模型，若不存在则兜底保存
+    if os.path.exists(os.path.join(m_args["path"]["red"], model_names["red"])):
+        logger.info(f"红球模型已保存到: {os.path.join(m_args['path']['red'], model_names['red'])}")
+    else:
+        model.save(os.path.join(m_args["path"]["red"], model_names["red"]))
 
     return model
 
@@ -172,9 +299,9 @@ def train_blue_ball_model(lottery_name, x_blue, y_blue):
     
     m_args = model_args[lottery_name]
     
-    # 划分数据
-    x_train, x_test, y_train, y_test = split_data(
-        x_blue, y_blue, args.train_test_split
+    # 划分数据：按时间顺序切分为 train/val/test
+    x_train, x_val, x_test, y_train, y_val, y_test = split_data(
+        x_blue, y_blue, train_ratio=0.6, val_ratio=0.2
     )
     
     # 确定输出类别数
@@ -183,43 +310,132 @@ def train_blue_ball_model(lottery_name, x_blue, y_blue):
     else:
         n_class = m_args["model_args"]["blue_n_class"]
     
-    # 建立模型
-    model = LotteryPredictor(
-        n_class=n_class,
-        sequence_len=x_train.shape[1],
-        embedding_size=m_args["model_args"]["blue_embedding_size"],
-        hidden_size=m_args["model_args"]["blue_hidden_size"],
-        num_layers=m_args["model_args"]["blue_layer_size"],
-        dropout_rate=0.2
-    )
-    
-    model.compile_model(learning_rate=m_args["train_args"]["blue_learning_rate"])
-    model.summary()
-    
-    # 对输入数据进行减1处理，转换为0-indexed（蓝球值范围1-16 -> 0-15）
-    x_train = x_train - 1
-    x_test = x_test - 1
-    
-    # 训练
-    model.train(
-        x_train, y_train - 1,  # 转换为 0-indexed
-        x_val=x_test,
-        y_val=y_test - 1,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        early_stopping_patience=10
-    )
-    
-    # 评估
-    evaluate_model(model, x_test, y_test - 1, name="蓝球")
-    
-    # 保存模型
+    # 根据玩法选择模型类型：
+    # - 双色球(ssq)：单输出分类模型 (LotteryPredictor)
+    # - 大乐透(dlt)：两个蓝球 -> 使用 MultiOutputLSTM 多输出模型
     model_dir = m_args["path"]["blue"]
     os.makedirs(model_dir, exist_ok=True)
     model_file = os.path.join(model_dir, model_names["blue"])
-    model.save(model_file)
-    
-    return model
+
+    # 确定蓝球输出个数
+    if lottery_name == "ssq":
+        num_blue_balls = 1
+    else:
+        num_blue_balls = 2
+
+    if lottery_name == "dlt":
+        # 多输出模型
+        model = MultiOutputLSTM(
+            n_class=n_class,
+            window_size=int(x_train.shape[1] / num_blue_balls),
+            num_balls=num_blue_balls,
+            embedding_size=m_args["model_args"]["blue_embedding_size"],
+            hidden_size=m_args["model_args"]["blue_hidden_size"],
+            num_layers=m_args["model_args"]["blue_layer_size"],
+            dropout_rate=0.2
+        )
+        model.compile_model(learning_rate=m_args["train_args"]["blue_learning_rate"])
+        model.summary()
+
+        # 转换为 0-indexed 并 reshape 为 (N, window_size, num_blue_balls)
+        x_train_proc = (x_train - 1).reshape(len(x_train), int(x_train.shape[1] / num_blue_balls), num_blue_balls)
+        x_test_proc = (x_test - 1).reshape(len(x_test), int(x_test.shape[1] / num_blue_balls), num_blue_balls)
+
+        # y_train/y_test 为 (N, num_blue_balls)，拆分为列表
+        y_train_list = [y_train[:, i] - 1 for i in range(num_blue_balls)]
+        y_test_list = [y_test[:, i] - 1 for i in range(num_blue_balls)]
+
+        checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
+            filepath=model_file,
+            monitor='val_loss',
+            save_best_only=True,
+            verbose=1
+        )
+        reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=5,
+            verbose=1
+        )
+
+        # 准备验证集数据
+        x_val_proc = (x_val - 1).reshape(len(x_val), int(x_val.shape[1] / num_blue_balls), num_blue_balls)
+        y_val_list = [y_val[:, i] - 1 for i in range(num_blue_balls)]
+
+        model.train(
+            x_train_proc, y_train_list,
+            x_val=x_val_proc,
+            y_val_list=y_val_list,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            early_stopping_patience=10,
+            callbacks=[checkpoint_cb, reduce_lr_cb]
+        )
+
+        # 在真正的测试集上评估
+        x_test_proc = (x_test - 1).reshape(len(x_test), int(x_test.shape[1] / num_blue_balls), num_blue_balls)
+        logger.info("蓝球多输出模型训练完成")
+        if os.path.exists(model_file):
+            logger.info(f"蓝球模型已保存到: {model_file}")
+        else:
+            model.save(model_file)
+
+        return model
+
+    else:
+        # 单输出（ssq）保持原实现
+        model = LotteryPredictor(
+            n_class=n_class,
+            sequence_len=x_train.shape[1],
+            embedding_size=m_args["model_args"]["blue_embedding_size"],
+            hidden_size=m_args["model_args"]["blue_hidden_size"],
+            num_layers=m_args["model_args"]["blue_layer_size"],
+            dropout_rate=0.2
+        )
+
+        model.compile_model(learning_rate=m_args["train_args"]["blue_learning_rate"])
+        model.summary()
+
+        # 对输入数据进行减1处理，转换为0-indexed（蓝球值范围1-16 -> 0-15）
+        x_train_proc = x_train - 1
+        x_test_proc = x_test - 1
+
+        checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
+            filepath=model_file,
+            monitor='val_loss',
+            save_best_only=True,
+            verbose=1
+        )
+        reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=5,
+            verbose=1
+        )
+
+        # 准备验证集数据
+        x_val_proc = x_val - 1
+
+        model.train(
+            x_train_proc, y_train - 1,
+            x_val=x_val_proc,
+            y_val=y_val - 1,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            early_stopping_patience=10,
+            callbacks=[checkpoint_cb, reduce_lr_cb]
+        )
+
+        # 在真正的测试集上评估
+        x_test_proc = x_test - 1
+        evaluate_model(model, x_test_proc, y_test - 1, name="蓝球")
+
+        if os.path.exists(model_file):
+            logger.info(f"蓝球模型已保存到: {model_file}")
+        else:
+            model.save(model_file)
+
+        return model
 
 
 def evaluate_model(model, x_test, y_test, name="模型"):
@@ -268,140 +484,6 @@ def main():
 
 
 if __name__ == "__main__":
-    if args.train_test_split < 0.5:
-        raise ValueError("训练集占比必须 > 0.5!")
+    if args.name not in ["ssq", "dlt"]:
+        raise ValueError("玩法名称无效！请选择 'ssq' (双色球) 或 'dlt' (大乐透)")
     main()
-
-
-
-def train_with_eval_blue_ball_model(name, x_train, y_train, x_test, y_test):
-    """ 蓝球模型训练与评估 """
-    m_args = model_args[name]
-    x_train = x_train - 1
-    train_data_len = x_train.shape[0]
-    if name == "ssq":
-        x_train = x_train.reshape(len(x_train), m_args["model_args"]["windows_size"])
-        y_train = tf.keras.utils.to_categorical(y_train - 1, num_classes=m_args["model_args"]["blue_n_class"])
-    else:
-        y_train = y_train - 1
-    logger.info("训练特征数据维度: {}".format(x_train.shape))
-    logger.info("训练标签数据维度: {}".format(y_train.shape))
-
-    x_test = x_test - 1
-    test_data_len = x_test.shape[0]
-    if name == "ssq":
-        x_test = x_test.reshape(len(x_test), m_args["model_args"]["windows_size"])
-        y_test = tf.keras.utils.to_categorical(y_test - 1, num_classes=m_args["model_args"]["blue_n_class"])
-    else:
-        y_test = y_test - 1
-    logger.info("训练特征数据维度: {}".format(x_test.shape))
-    logger.info("训练标签数据维度: {}".format(y_test.shape))
-
-    start_time = time.time()
-
-    with tf.compat.v1.Session() as sess:
-        if name == "ssq":
-            blue_ball_model = SignalLstmModel(
-                batch_size=m_args["model_args"]["batch_size"],
-                n_class=m_args["model_args"]["blue_n_class"],
-                w_size=m_args["model_args"]["windows_size"],
-                embedding_size=m_args["model_args"]["blue_embedding_size"],
-                hidden_size=m_args["model_args"]["blue_hidden_size"],
-                outputs_size=m_args["model_args"]["blue_n_class"],
-                layer_size=m_args["model_args"]["blue_layer_size"]
-            )
-        else:
-            blue_ball_model = LstmWithCRFModel(
-                batch_size=m_args["model_args"]["batch_size"],
-                n_class=m_args["model_args"]["blue_n_class"],
-                ball_num=m_args["model_args"]["blue_sequence_len"],
-                w_size=m_args["model_args"]["windows_size"],
-                embedding_size=m_args["model_args"]["blue_embedding_size"],
-                words_size=m_args["model_args"]["blue_n_class"],
-                hidden_size=m_args["model_args"]["blue_hidden_size"],
-                layer_size=m_args["model_args"]["blue_layer_size"]
-            )
-        train_step = tf.compat.v1.train.AdamOptimizer(
-            learning_rate=m_args["train_args"]["blue_learning_rate"],
-            beta1=m_args["train_args"]["blue_beta1"],
-            beta2=m_args["train_args"]["blue_beta2"],
-            epsilon=m_args["train_args"]["blue_epsilon"],
-            use_locking=False,
-            name='Adam'
-        ).minimize(blue_ball_model.loss)
-        sess.run(tf.compat.v1.global_variables_initializer())
-        sequence_len = "" if name == "ssq" else m_args["model_args"]["blue_sequence_len"]
-        for epoch in range(m_args["model_args"]["blue_epochs"]):
-            for i in range(train_data_len):
-                if name == "ssq":
-                    _, loss_, pred = sess.run([
-                        train_step, blue_ball_model.loss, blue_ball_model.pred_label
-                    ], feed_dict={
-                        "inputs:0": x_train[i:(i+1), :],
-                        "tag_indices:0": y_train[i:(i+1), :],
-                    })
-                    if i % 100 == 0:
-                        logger.info("epoch: {}, loss: {}, tag: {}, pred: {}".format(
-                            epoch, loss_, np.argmax(y_train[i:(i+1), :][0]) + 1, pred[0] + 1)
-                        )
-                else:
-                    _, loss_, pred = sess.run([
-                        train_step, blue_ball_model.loss, blue_ball_model.pred_sequence
-                    ], feed_dict={
-                        "inputs:0": x_train[i:(i + 1), :, :],
-                        "tag_indices:0": y_train[i:(i + 1), :],
-                        "sequence_length:0": np.array([sequence_len] * 1)
-                    })
-                    if i % 100 == 0:
-                        logger.info("epoch: {}, loss: {}, tag: {}, pred: {}".format(
-                            epoch, loss_, y_train[i:(i + 1), :][0] + 1, pred[0] + 1)
-                        )
-        logger.info("训练耗时: {}".format(time.time() - start_time))
-        pred_key[ball_name[1][0]] = blue_ball_model.pred_label.name if name == "ssq" else blue_ball_model.pred_sequence.name
-        if not os.path.exists(m_args["path"]["blue"]):
-            os.mkdir(m_args["path"]["blue"])
-        saver = tf.compat.v1.train.Saver()
-        saver.save(sess, "{}{}.{}".format(m_args["path"]["blue"], blue_ball_model_name, extension))
-        logger.info("模型评估【{}】...".format(name_path[name]["name"]))
-        eval_d = {}
-        all_true_count = 0
-        for j in range(test_data_len):
-            if name == "ssq":
-                true = y_test[j:(j + 1), :]
-                pred = sess.run(blue_ball_model.pred_label
-                , feed_dict={"inputs:0": x_test[j:(j + 1), :]})
-            else:
-                true = y_test[j:(j + 1), :]
-                pred = sess.run(blue_ball_model.pred_sequence
-                , feed_dict={
-                    "inputs:0": x_test[j:(j + 1), :, :],
-                    "sequence_length:0": np.array([sequence_len] * 1)
-                })
-            count = np.sum(true == pred + 1)
-            all_true_count += count
-            if count in eval_d:
-                eval_d[count] += 1
-            else:
-                eval_d[count] = 1
-        logger.info("测试期数: {}".format(test_data_len))
-        for k, v in eval_d.items():
-            logger.info("命中{}个球，{}期，占比: {}%".format(k, v, round(v * 100 / test_data_len, 2)))
-        if name == "ssq":
-            logger.info(
-                "整体准确率: {}%".format(
-                    round(all_true_count * 100 / test_data_len, 2)
-                )
-            )
-        else:
-            logger.info(
-                "整体准确率: {}%".format(
-                    round(all_true_count * 100 / (test_data_len * sequence_len), 2)
-                )
-            )
-
-
-if __name__ == '__main__':
-    if not args.name:
-        raise Exception("玩法名称不能为空！")
-    else:
-        main()

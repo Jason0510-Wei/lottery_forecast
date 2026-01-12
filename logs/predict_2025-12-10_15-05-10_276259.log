@@ -1,0 +1,7 @@
+2025-12-10 15:05:10.286 | INFO     | run_predict:main:247 - 
+开始预测【大乐透】
+
+2025-12-10 15:05:10.287 | INFO     | run_predict:load_models:28 - 加载【大乐透】模型...
+2025-12-10 15:05:10.288 | ERROR    | run_predict:load_models:35 - 红球模型不存在: F:\项目\lottery_forecast\model\dlt/red_ball_model/red_ball_model.h5
+2025-12-10 15:05:10.297 | INFO     | run_predict:load_models:36 - 请先运行: python run_train_model.py --name dlt
+2025-12-10 15:05:10.298 | ERROR    | run_predict:main:252 - 模型加载失败

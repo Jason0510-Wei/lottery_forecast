@@ -1,0 +1,84 @@
+2025-11-25 20:06:49.814 | INFO     | __main__:main:285 - 
+开始训练【双色球】模型
+2025-11-25 20:06:49.814 | INFO     | __main__:main:286 - 配置: 训练集占比=0.7, Batch Size=32, Epochs=5
+2025-11-25 20:06:49.817 | INFO     | __main__:load_data:37 - 数据已加载，共 3378 条记录
+2025-11-25 20:06:49.818 | INFO     | __main__:load_data:38 - 数据列: ['期数', '红球_1', '红球_2', '红球_3', '红球_4', '红球_5', '红球_6', '蓝球']
+2025-11-25 20:06:49.824 | INFO     | __main__:preprocess_data:76 - 红球数据形状: X=(3375, 18), y=(3375, 6)
+2025-11-25 20:06:49.824 | INFO     | __main__:preprocess_data:77 - 蓝球数据形状: X=(3375, 3), y=(3375, 1)
+2025-11-25 20:06:49.825 | INFO     | __main__:train_red_ball_model:95 - ==================================================
+2025-11-25 20:06:49.825 | INFO     | __main__:train_red_ball_model:96 - 开始训练【双色球】红球模型...
+2025-11-25 20:06:49.825 | INFO     | __main__:train_red_ball_model:97 - ==================================================
+2025-11-25 20:06:49.825 | INFO     | __main__:split_data:88 - 训练数据: 2362, 测试数据: 1013
+2025-11-25 20:06:49.825 | INFO     | modeling:build_model:194 - 构建多输出模型...
+2025-11-25 20:06:50.210 | INFO     | modeling:build_model:241 - 多输出模型构建完成
+2025-11-25 20:06:50.215 | INFO     | modeling:compile_model:257 - 多输出模型编译完成
+2025-11-25 20:06:55.860 | INFO     | modeling:train:291 - 多输出模型训练完成
+2025-11-25 20:06:56.439 | INFO     | __main__:train_red_ball_model:175 - 红球第1个位置 测试准确率: 0.1451
+2025-11-25 20:06:56.440 | INFO     | __main__:train_red_ball_model:175 - 红球第2个位置 测试准确率: 0.0879
+2025-11-25 20:06:56.440 | INFO     | __main__:train_red_ball_model:175 - 红球第3个位置 测试准确率: 0.0642
+2025-11-25 20:06:56.440 | INFO     | __main__:train_red_ball_model:175 - 红球第4个位置 测试准确率: 0.0701
+2025-11-25 20:06:56.440 | INFO     | __main__:train_red_ball_model:175 - 红球第5个位置 测试准确率: 0.0800
+2025-11-25 20:06:56.440 | INFO     | __main__:train_red_ball_model:175 - 红球第6个位置 测试准确率: 0.1599
+2025-11-25 20:06:56.440 | INFO     | __main__:train_red_ball_model:179 - 红球模型已保存到: F:\项目\lottery_forecast\model\ssq/red_ball_model/red_ball_model.h5
+2025-11-25 20:06:56.441 | INFO     | __main__:train_blue_ball_model:189 - ==================================================
+2025-11-25 20:06:56.441 | INFO     | __main__:train_blue_ball_model:190 - 开始训练【双色球】蓝球模型...
+2025-11-25 20:06:56.441 | INFO     | __main__:train_blue_ball_model:191 - ==================================================
+2025-11-25 20:06:56.441 | INFO     | __main__:split_data:88 - 训练数据: 2362, 测试数据: 1013
+2025-11-25 20:06:56.441 | INFO     | modeling:build_model:38 - 构建模型...
+2025-11-25 20:06:56.466 | INFO     | modeling:build_model:68 - 模型构建完成
+2025-11-25 20:06:56.468 | INFO     | modeling:compile_model:82 - 模型编译完成
+2025-11-25 20:06:59.726 | INFO     | modeling:train:125 - 模型训练完成
+2025-11-25 20:06:59.726 | INFO     | __main__:evaluate_model:265 - 
+【蓝球】模型评估...
+2025-11-25 20:07:00.077 | INFO     | __main__:evaluate_model:273 - 【蓝球】测试准确率: 0.0593
+2025-11-25 20:07:00.079 | INFO     | __main__:evaluate_model:280 - 【蓝球】Top-1 命中率: 0.0612
+2025-11-25 20:07:00.082 | INFO     | __main__:evaluate_model:280 - 【蓝球】Top-3 命中率: 0.1737
+2025-11-25 20:07:00.084 | INFO     | __main__:evaluate_model:280 - 【蓝球】Top-5 命中率: 0.2932
+2025-11-25 20:07:00.084 | INFO     | __main__:train_blue_ball_model:256 - 蓝球模型已保存到: F:\项目\lottery_forecast\model\ssq/blue_ball_model/blue_ball_model.h5
+2025-11-25 20:07:00.084 | INFO     | __main__:main:302 - 
+==================================================
+2025-11-25 20:07:00.085 | INFO     | __main__:main:303 - 【双色球】训练完成！
+2025-11-25 20:07:00.085 | INFO     | __main__:main:304 - ==================================================
+2025-11-25 20:07:00.085 | INFO     | __main__:main:305 - 下一步: python run_predict.py --name ssq
+2025-11-25 20:07:00.085 | INFO     | __main__:main:285 - 
+开始训练【双色球】模型
+2025-11-25 20:07:00.085 | INFO     | __main__:main:286 - 配置: 训练集占比=0.7, Batch Size=32, Epochs=5
+2025-11-25 20:07:00.087 | INFO     | __main__:load_data:37 - 数据已加载，共 3378 条记录
+2025-11-25 20:07:00.087 | INFO     | __main__:load_data:38 - 数据列: ['期数', '红球_1', '红球_2', '红球_3', '红球_4', '红球_5', '红球_6', '蓝球']
+2025-11-25 20:07:00.095 | INFO     | __main__:preprocess_data:76 - 红球数据形状: X=(3375, 18), y=(3375, 6)
+2025-11-25 20:07:00.095 | INFO     | __main__:preprocess_data:77 - 蓝球数据形状: X=(3375, 3), y=(3375, 1)
+2025-11-25 20:07:00.096 | INFO     | __main__:train_red_ball_model:95 - ==================================================
+2025-11-25 20:07:00.096 | INFO     | __main__:train_red_ball_model:96 - 开始训练【双色球】红球模型...
+2025-11-25 20:07:00.096 | INFO     | __main__:train_red_ball_model:97 - ==================================================
+2025-11-25 20:07:00.096 | INFO     | __main__:split_data:88 - 训练数据: 2362, 测试数据: 1013
+2025-11-25 20:07:00.096 | INFO     | modeling:build_model:194 - 构建多输出模型...
+2025-11-25 20:07:00.144 | INFO     | modeling:build_model:241 - 多输出模型构建完成
+2025-11-25 20:07:00.146 | INFO     | modeling:compile_model:257 - 多输出模型编译完成
+2025-11-25 20:07:09.107 | INFO     | modeling:train:291 - 多输出模型训练完成
+2025-11-25 20:07:09.605 | INFO     | __main__:train_red_ball_model:175 - 红球第1个位置 测试准确率: 0.1451
+2025-11-25 20:07:09.606 | INFO     | __main__:train_red_ball_model:175 - 红球第2个位置 测试准确率: 0.0898
+2025-11-25 20:07:09.606 | INFO     | __main__:train_red_ball_model:175 - 红球第3个位置 测试准确率: 0.0701
+2025-11-25 20:07:09.606 | INFO     | __main__:train_red_ball_model:175 - 红球第4个位置 测试准确率: 0.0661
+2025-11-25 20:07:09.606 | INFO     | __main__:train_red_ball_model:175 - 红球第5个位置 测试准确率: 0.0780
+2025-11-25 20:07:09.606 | INFO     | __main__:train_red_ball_model:175 - 红球第6个位置 测试准确率: 0.0030
+2025-11-25 20:07:09.606 | INFO     | __main__:train_red_ball_model:179 - 红球模型已保存到: F:\项目\lottery_forecast\model\ssq/red_ball_model/red_ball_model.h5
+2025-11-25 20:07:09.606 | INFO     | __main__:train_blue_ball_model:189 - ==================================================
+2025-11-25 20:07:09.606 | INFO     | __main__:train_blue_ball_model:190 - 开始训练【双色球】蓝球模型...
+2025-11-25 20:07:09.607 | INFO     | __main__:train_blue_ball_model:191 - ==================================================
+2025-11-25 20:07:09.607 | INFO     | __main__:split_data:88 - 训练数据: 2362, 测试数据: 1013
+2025-11-25 20:07:09.607 | INFO     | modeling:build_model:38 - 构建模型...
+2025-11-25 20:07:09.629 | INFO     | modeling:build_model:68 - 模型构建完成
+2025-11-25 20:07:09.630 | INFO     | modeling:compile_model:82 - 模型编译完成
+2025-11-25 20:07:12.974 | INFO     | modeling:train:125 - 模型训练完成
+2025-11-25 20:07:12.974 | INFO     | __main__:evaluate_model:265 - 
+【蓝球】模型评估...
+2025-11-25 20:07:13.320 | INFO     | __main__:evaluate_model:273 - 【蓝球】测试准确率: 0.0592
+2025-11-25 20:07:13.322 | INFO     | __main__:evaluate_model:280 - 【蓝球】Top-1 命中率: 0.0592
+2025-11-25 20:07:13.325 | INFO     | __main__:evaluate_model:280 - 【蓝球】Top-3 命中率: 0.1797
+2025-11-25 20:07:13.327 | INFO     | __main__:evaluate_model:280 - 【蓝球】Top-5 命中率: 0.2981
+2025-11-25 20:07:13.327 | INFO     | __main__:train_blue_ball_model:256 - 蓝球模型已保存到: F:\项目\lottery_forecast\model\ssq/blue_ball_model/blue_ball_model.h5
+2025-11-25 20:07:13.328 | INFO     | __main__:main:302 - 
+==================================================
+2025-11-25 20:07:13.328 | INFO     | __main__:main:303 - 【双色球】训练完成！
+2025-11-25 20:07:13.328 | INFO     | __main__:main:304 - ==================================================
+2025-11-25 20:07:13.328 | INFO     | __main__:main:305 - 下一步: python run_predict.py --name ssq

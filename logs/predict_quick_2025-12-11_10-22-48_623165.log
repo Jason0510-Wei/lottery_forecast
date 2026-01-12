@@ -1,0 +1,5 @@
+2025-12-11 10:22:48.624 | INFO     | __main__:main:67 - 开始快速预测（dlt）
+2025-12-11 10:22:48.654 | INFO     | __main__:_ensure_ascii_path:96 - 模型路径包含非 ASCII 字符，已复制到临时路径: C:\Users\v_fwei\AppData\Local\Temp\lottery_models\red_ball_model.h5
+2025-12-11 10:22:49.645 | INFO     | modeling:load:596 - 多标签模型已加载: C:\Users\v_fwei\AppData\Local\Temp\lottery_models\red_ball_model.h5
+2025-12-11 10:22:50.927 | INFO     | __main__:main:122 - 预测红球: [3, 18, 22, 30, 35]
+2025-12-11 10:22:50.928 | INFO     | __main__:main:123 - 预测蓝球(启发式): [7, 10]
